@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Keuangan Mahasiswa</title>
+    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiS2V1YW5nYW4gTWFoYXNpc3dhIiwic2hvcnRfbmFtZSI6IktldWFuZ2FuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiI2ZmZmZmZiIsInRoZW1lX2NvbG9yIjoiIzI1NjNlYiJ9">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            overscroll-behavior: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { Mic, Plus, TrendingUp, TrendingDown, Wallet, BarChart3, Trash2 } = lucide;
+
+        // Simple localStorage wrapper to match window.storage API
+        window.storage = {
+            get: async (key) => {
+                try {
+                    const value = localStorage.getItem(key);
+                    return value ? { key, value, shared: false } : null;
+                } catch (e) {
+                    return null;
+                }
+            },
+            set: async (key, value) => {
+                try {
+                    localStorage.setItem(key, value);
+                    return { key, value, shared: false };
+                } catch (e) {
+                    return null;
+                }
+            },
+            delete: async (key) => {
+                try {
+                    localStorage.removeItem(key);
+                    return { key, deleted: true, shared: false };
+                } catch (e) {
+                    return null;
+                }
+            }
+        };
+
+        const AppKeuanganMobile = () => {
+            const [transaksi, setTransaksi] = useState([]);
+            const [jenis, setJenis] = useState('pemasukan');
+            const [nominal, setNominal] = useState('');
+            const [keterangan, setKeterangan] = useState('');
+            const [isListening, setIsListening] = useState(false);
+            const [showAnalisis, setShowAnalisis] = useState(false);
+
+            useEffect(() => {
+                loadData();
+            }, []);
+
+            useEffect(() => {
+                if (transaksi.length > 0) {
+                    saveData();
+                }
+            }, [transaksi]);
+
+            const loadData = async () => {
+                try {
+                    const result = await window.storage.get('transaksi-data');
+                    if (result && result.value) {
+                        setTransaksi(JSON.parse(result.value));
+                    }
+                } catch (error) {
+                    console.log('No previous data found');
+                }
+            };
+
+            const saveData = async () => {
+                try {
+                    await window.storage.set('transaksi-data', JSON.stringify(transaksi));
+                } catch (error) {
+                    console.error('Error saving data:', error);
+                }
+            };
+
+            const formatRupiah = (angka) => {
+                return new Intl.NumberFormat('id-ID', {
+                    style: 'currency',
+                    currency: 'IDR',
+                    minimumFractionDigits: 0
+                }).format(angka);
+            };
+
+            const tambahTransaksi = () => {
+                if (!nominal || parseFloat(nominal) <= 0) {
+                    alert('Nominal harus diisi dengan angka positif!');
+                    return;
+                }
+                if (!keterangan.trim()) {
+                    alert('Keterangan tidak boleh kosong!');
+                    return;
+                }
+
+                const newTransaksi = {
+                    id: Date.now(),
+                    jenis,
+                    nominal: parseFloat(nominal),
+                    keterangan: keterangan.trim(),
+                    tanggal: new Date().toLocaleDateString('id-ID')
+                };
+
+                setTransaksi([newTransaksi, ...transaksi]);
+                setNominal('');
+                setKeterangan('');
+            };
+
+            const hapusTransaksi = (id) => {
+                if (window.confirm('Yakin mau hapus transaksi ini?')) {
+                    setTransaksi(transaksi.filter(t => t.id !== id));
+                }
+            };
+
+            const hitungSaldo = () => {
+                return transaksi.reduce((acc, t) => {
+                    return t.jenis === 'pemasukan' ? acc + t.nominal : acc - t.nominal;
+                }, 0);
+            };
+
+            const getAnalisis = () => {
+                const pengeluaran = transaksi.filter(t => t.jenis === 'pengeluaran').map(t => t.nominal);
+                const pemasukan = transaksi.filter(t => t.jenis === 'pemasukan').map(t => t.nominal);
+
+                if (pengeluaran.length === 0 && pemasukan.length === 0) {
+                    return null;
+                }
+
+                const totalPengeluaran = pengeluaran.reduce((a, b) => a + b, 0);
+                const totalPemasukan = pemasukan.reduce((a, b) => a + b, 0);
+
+                return {
+                    totalPengeluaran,
+                    totalPemasukan,
+                    rataRataPengeluaran: pengeluaran.length > 0 ? totalPengeluaran / pengeluaran.length : 0,
+                    rataRataPemasukan: pemasukan.length > 0 ? totalPemasukan / pemasukan.length : 0,
+                    pengeluaranTertinggi: pengeluaran.length > 0 ? Math.max(...pengeluaran) : 0,
+                    pengeluaranTerendah: pengeluaran.length > 0 ? Math.min(...pengeluaran) : 0,
+                    pemasukanTertinggi: pemasukan.length > 0 ? Math.max(...pemasukan) : 0,
+                    jumlahTransaksi: transaksi.length
+                };
+            };
+
+            const startVoiceInput = () => {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    alert('Browser kamu tidak support speech recognition. Coba pakai Chrome atau Edge ya!');
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+
+                recognition.lang = 'id-ID';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onstart = () => {
+                    setIsListening(true);
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript.toLowerCase();
+                    parseVoiceInput(transcript);
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    setIsListening(false);
+                    alert('Gagal mendengarkan. Coba lagi ya!');
+                };
+
+                recognition.onend = () => {
+                    setIsListening(false);
+                };
+
+                recognition.start();
+            };
+
+            const parseVoiceInput = (text) => {
+                const patterns = [
+                    /(?:pemasukan|masuk|dapat|terima)\s+(\d+)\s+(.+)/i,
+                    /(?:pengeluaran|keluar|bayar|beli)\s+(\d+)\s+(.+)/i,
+                ];
+
+                for (let pattern of patterns) {
+                    const match = text.match(pattern);
+                    if (match) {
+                        const jenisDetected = text.includes('masuk') || text.includes('pemasukan') || text.includes('dapat') || text.includes('terima')
+                            ? 'pemasukan'
+                            : 'pengeluaran';
+
+                        setJenis(jenisDetected);
+                        setNominal(match[1]);
+                        setKeterangan(match[2].trim());
+
+                        alert(`Berhasil! ${jenisDetected} Rp ${match[1]} untuk ${match[2]}`);
+                        return;
+                    }
+                }
+
+                alert('Format tidak dikenali. Coba ucapkan seperti: "pemasukan 50000 uang saku" atau "pengeluaran 20000 makan siang"');
+            };
+
+            const saldo = hitungSaldo();
+            const analisis = getAnalisis();
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-b-3xl shadow-lg">
+                        <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                            <Wallet className="w-8 h-8" />
+                            Keuangan Mahasiswa
+                        </h1>
+
+                        <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mt-4">
+                            <p className="text-sm opacity-90">Saldo Kamu</p>
+                            <p className={`text-3xl font-bold ${saldo >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                                {formatRupiah(saldo)}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="px-4 mt-6">
+                        <div className="bg-white rounded-2xl shadow-lg p-5">
+                            <h2 className="text-lg font-semibold mb-4 text-gray-800">Tambah Transaksi</h2>
+
+                            <div className="flex gap-2 mb-4">
+                                <button
+                                    onClick={() => setJenis('pemasukan')}
+                                    className={`flex-1 py-3 rounded-xl font-medium transition-all ${jenis === 'pemasukan'
+                                        ? 'bg-green-500 text-white shadow-md'
+                                        : 'bg-gray-100 text-gray-600'
+                                        }`}
+                                >
+                                    <TrendingUp className="w-5 h-5 inline mr-1" />
+                                    Pemasukan
+                                </button>
+                                <button
+                                    onClick={() => setJenis('pengeluaran')}
+                                    className={`flex-1 py-3 rounded-xl font-medium transition-all ${jenis === 'pengeluaran'
+                                        ? 'bg-red-500 text-white shadow-md'
+                                        : 'bg-gray-100 text-gray-600'
+                                        }`}
+                                >
+                                    <TrendingDown className="w-5 h-5 inline mr-1" />
+                                    Pengeluaran
+                                </button>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Nominal</label>
+                                <input
+                                    type="number"
+                                    value={nominal}
+                                    onChange={(e) => setNominal(e.target.value)}
+                                    placeholder="Masukkan nominal..."
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Keterangan</label>
+                                <input
+                                    type="text"
+                                    value={keterangan}
+                                    onChange={(e) => setKeterangan(e.target.value)}
+                                    placeholder="Contoh: Makan siang, Uang saku..."
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={tambahTransaksi}
+                                    className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Plus className="w-5 h-5" />
+                                    Tambah
+                                </button>
+                                <button
+                                    onClick={startVoiceInput}
+                                    disabled={isListening}
+                                    className={`px-6 py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${isListening
+                                        ? 'bg-red-500 text-white animate-pulse'
+                                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                                        }`}
+                                >
+                                    <Mic className="w-5 h-5" />
+                                    {isListening ? 'Listening...' : 'Voice'}
+                                </button>
+                            </div>
+
+                            <p className="text-xs text-gray-500 mt-3 text-center">
+                                💡 Voice: Ucapkan "pemasukan 50000 uang saku" atau "pengeluaran 20000 makan"
+                            </p>
+                        </div>
+                    </div>
+
+                    {transaksi.length > 0 && (
+                        <div className="px-4 mt-4">
+                            <button
+                                onClick={() => setShowAnalisis(!showAnalisis)}
+                                className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                            >
+                                <BarChart3 className="w-5 h-5" />
+                                {showAnalisis ? 'Sembunyikan' : 'Lihat'} Analisis
+                            </button>
+                        </div>
+                    )}
+
+                    {showAnalisis && analisis && (
+                        <div className="px-4 mt-4">
+                            <div className="bg-white rounded-2xl shadow-lg p-5">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-800">📊 Analisis Keuangan</h3>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-green-50 p-3 rounded-xl">
+                                        <p className="text-xs text-gray-600">Total Pemasukan</p>
+                                        <p className="text-lg font-bold text-green-600">{formatRupiah(analisis.totalPemasukan)}</p>
+                                    </div>
+                                    <div className="bg-red-50 p-3 rounded-xl">
+                                        <p className="text-xs text-gray-600">Total Pengeluaran</p>
+                                        <p className="text-lg font-bold text-red-600">{formatRupiah(analisis.totalPengeluaran)}</p>
+                                    </div>
+                                    <div className="bg-blue-50 p-3 rounded-xl">
+                                        <p className="text-xs text-gray-600">Rata-rata Pemasukan</p>
+                                        <p className="text-sm font-semibold text-blue-600">{formatRupiah(analisis.rataRataPemasukan)}</p>
+                                    </div>
+                                    <div className="bg-purple-50 p-3 rounded-xl">
+                                        <p className="text-xs text-gray-600">Rata-rata Pengeluaran</p>
+                                        <p className="text-sm font-semibold text-purple-600">{formatRupiah(analisis.rataRataPengeluaran)}</p>
+                                    </div>
+                                    <div className="bg-orange-50 p-3 rounded-xl">
+                                        <p className="text-xs text-gray-600">Pengeluaran Tertinggi</p>
+                                        <p className="text-sm font-semibold text-orange-600">{formatRupiah(analisis.pengeluaranTertinggi)}</p>
+                                    </div>
+                                    <div className="bg-pink-50 p-3 rounded-xl">
+                                        <p className="text-xs text-gray-600">Total Transaksi</p>
+                                        <p className="text-sm font-semibold text-pink-600">{analisis.jumlahTransaksi} kali</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="px-4 mt-6">
+                        <h2 className="text-lg font-semibold mb-3 text-gray-800">Riwayat Transaksi</h2>
+
+                        {transaksi.length === 0 ? (
+                            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                                <p className="text-gray-400">Belum ada transaksi</p>
+                                <p className="text-sm text-gray-400 mt-1">Mulai catat keuanganmu!</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {transaksi.map((t) => (
+                                    <div
+                                        key={t.id}
+                                        className="bg-white rounded-xl shadow p-4 flex items-center justify-between"
+                                    >
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.jenis === 'pemasukan' ? 'bg-green-100' : 'bg-red-100'
+                                                }`}>
+                                                {t.jenis === 'pemasukan' ? (
+                                                    <TrendingUp className="w-6 h-6 text-green-600" />
+                                                ) : (
+                                                    <TrendingDown className="w-6 h-6 text-red-600" />
+                                                )}
+                                            </div>
+
+                                            <div className="flex-1">
+                                                <p className="font-semibold text-gray-800">{t.keterangan}</p>
+                                                <p className="text-xs text-gray-500">{t.tanggal}</p>
+                                                <p className={`text-lg font-bold ${t.jenis === 'pemasukan' ? 'text-green-600' : 'text-red-600'
+                                                    }`}>
+                                                    {t.jenis === 'pemasukan' ? '+' : '-'} {formatRupiah(t.nominal)}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={() => hapusTransaksi(t.id)}
+                                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('app'));
+        root.render(<AppKeuanganMobile />);
+    </script>
+</body>
+</html>
